@@ -1,0 +1,6 @@
+@"
+*.exe
+*.out
+.vscode/
+.idea/
+"@ | Set-Content .gitignore
