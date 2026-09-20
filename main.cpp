@@ -1,6 +1,9 @@
 #include <bits/stdc++.h>
 #include "parser.h"
 using namespace std;
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 static void clearTimeline(SimulationInput &sim) {
     for (auto &row : sim.timeline)
@@ -26,7 +29,9 @@ static vector<Process *> byInputOrder(SimulationInput &sim) {
     return ptrs;
 }
 
-// 1. FCFS
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. FCFS — runs each process to completion in arrival order, no preemption
+// ─────────────────────────────────────────────────────────────────────────────
 static void fcfs(SimulationInput &sim) {
     int clock = sim.processes[0].arrival;
     for (auto *p : byInputOrder(sim)) {
@@ -40,7 +45,9 @@ static void fcfs(SimulationInput &sim) {
     }
 }
 
-// 2. Round Robin
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. Round Robin — each process gets a fixed time slice (quantum), then yields
+// ─────────────────────────────────────────────────────────────────────────────
 static void roundRobin(SimulationInput &sim, int quantum) {
     int n = (int)sim.processes.size();
     vector<int> remaining(n);
@@ -81,12 +88,70 @@ static void roundRobin(SimulationInput &sim, int quantum) {
     }
     fillWaitGaps(sim);
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. SRT — preemptive; at each tick, runs the process with least remaining time
+// ─────────────────────────────────────────────────────────────────────────────
+static void srt(SimulationInput &sim) {
+    int n = (int)sim.processes.size();
+    vector<int> remaining(n);
+    for (int i = 0; i < n; i++) remaining[i] = sim.processes[i].value;
+
+    for (int t = 0; t < sim.lastInstant; t++) {
+        int best = -1;
+        for (int i = 0; i < n; i++) {
+            if (sim.processes[i].arrival > t || remaining[i] <= 0) continue;
+            if (best == -1 || remaining[i] < remaining[best]) best = i;
+        }
+        if (best == -1) continue;
+
+        sim.timeline[t][sim.processes[best].index] = '*';
+        remaining[best]--;
+        if (remaining[best] == 0)
+            recordStats(sim.processes[best], t + 1);
+    }
+    fillWaitGaps(sim);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. HRRN — non-preemptive; picks process with highest (wait+service)/service
+//           ratio, preventing starvation of long processes
+// ─────────────────────────────────────────────────────────────────────────────
+static void hrrn(SimulationInput &sim) {
+    int n = (int)sim.processes.size();
+    vector<bool> done(n, false);
+    int clock = 0, completed = 0;
+
+    while (completed < n) {
+        int best = -1;
+        double bestRatio = -1.0;
+        for (int i = 0; i < n; i++) {
+            if (done[i] || sim.processes[i].arrival > clock) continue;
+            int wait = clock - sim.processes[i].arrival;
+            double ratio = (wait + sim.processes[i].value) * 1.0 / sim.processes[i].value;
+            if (ratio > bestRatio) { bestRatio = ratio; best = i; }
+        }
+        if (best == -1) { clock++; continue; }
+
+        Process &p = sim.processes[best];
+        for (int t = p.arrival; t < clock; t++)
+            sim.timeline[t][p.index] = '.';
+        for (int t = clock; t < clock + p.value; t++)
+            sim.timeline[t][p.index] = '*';
+        recordStats(p, clock + p.value);
+        clock = p.finish;
+        done[best] = true;
+        completed++;
+    }
+}
+
+
 
 // Dispatch
 static void runAlgorithm(SimulationInput &sim, const AlgorithmSpec &spec) {
     switch (spec.id) {
-        case 1: fcfs(sim);                    break;
+        case 1: fcfs(sim);                     break;
         case 2: roundRobin(sim, spec.quantum); break;
+        case 3: srt(sim);                      break;
+        case 4: hrrn(sim);                     break;
         default:
             cerr << "Algorithm " << spec.id << " not implemented.\n";
             break;
@@ -94,7 +159,7 @@ static void runAlgorithm(SimulationInput &sim, const AlgorithmSpec &spec) {
 }
 
 // Output
-static const string ALGO_NAMES[3] = {"", "FCFS", "RR-"};
+static const string ALGO_NAMES[6] = {"", "FCFS", "RR-","SRT", "HRRN"};
 
 static string algoLabel(const AlgorithmSpec &s) {
     if (s.id == 2) return "RR-" + to_string(s.quantum);
