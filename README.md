@@ -28,6 +28,8 @@ The simulator currently supports:
 ```text
 cpuscheduler/
 │
+├── README.md
+├── .gitignore
 ├── main.cpp
 ├── parser.h
 │
@@ -206,7 +208,7 @@ Where:
 
 * `*` represents CPU execution
 * `.` represents waiting time after arrival
-* blank positions represent time before a process arrives or unused timeline positions
+* Blank positions represent time before a process arrives or unused timeline positions
 
 ### Stats Mode
 
@@ -345,4 +347,3 @@ Each demonstration test runs all six implemented scheduling algorithms.
 * **STL**
 * **Data Structures**
 * **CPU Scheduling Algorithms**
-
