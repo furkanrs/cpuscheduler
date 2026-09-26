@@ -142,7 +142,57 @@ static void hrrn(SimulationInput &sim) {
         completed++;
     }
 }
-
+// ─────────────────────────────────────────────────────────────────────────────
+// 5 & 6. Feedback — shared engine, quantumAt(level) controls burst length
+// ─────────────────────────────────────────────────────────────────────────────
+static void feedback(SimulationInput &sim, const function<int(int)> &quantumAt) {
+    int n = (int)sim.processes.size();
+    vector<int> remaining(n);
+    for (int i = 0; i < n; i++) remaining[i] = sim.processes[i].value;
+ 
+    vector<deque<int>> levels(1);   // multi-level FIFO queues
+    int nextIn = 0;
+ 
+    auto admitArrivals = [&](int upTo) {
+        while (nextIn < n && sim.processes[nextIn].arrival <= upTo) {
+            levels[0].push_back(nextIn);
+            nextIn++;
+        }
+    };
+ 
+    int t = 0;
+    while (t < sim.lastInstant) {
+        admitArrivals(t);
+ 
+        int lvl = -1;
+        for (int L = 0; L < (int)levels.size(); L++)
+            if (!levels[L].empty()) { lvl = L; break; }
+        if (lvl == -1) { t++; continue; }
+ 
+        int idx   = levels[lvl].front(); levels[lvl].pop_front();
+        int slice = quantumAt(lvl);
+        int ran   = 0;
+ 
+        while (ran < slice && remaining[idx] > 0 && t < sim.lastInstant) {
+            sim.timeline[t][sim.processes[idx].index] = '*';
+            remaining[idx]--;
+            ran++; t++;
+            admitArrivals(t);
+        }
+ 
+        if (remaining[idx] == 0) {
+            recordStats(sim.processes[idx], t);
+        } else {
+            int next = lvl + 1;
+            if (next >= (int)levels.size()) levels.emplace_back();
+            levels[next].push_back(idx);
+        }
+    }
+    fillWaitGaps(sim);
+}
+ 
+static void feedbackQ1 (SimulationInput &sim) { feedback(sim, [](int)    { return 1; }); }
+static void feedbackQ2i(SimulationInput &sim) { feedback(sim, [](int lvl){ return 1 << lvl; }); }
 
 
 // Dispatch
@@ -152,6 +202,8 @@ static void runAlgorithm(SimulationInput &sim, const AlgorithmSpec &spec) {
         case 2: roundRobin(sim, spec.quantum); break;
         case 3: srt(sim);                      break;
         case 4: hrrn(sim);                     break;
+        case 5: feedbackQ1(sim);               break;
+        case 6: feedbackQ2i(sim);              break;
         default:
             cerr << "Algorithm " << spec.id << " not implemented.\n";
             break;
@@ -159,7 +211,7 @@ static void runAlgorithm(SimulationInput &sim, const AlgorithmSpec &spec) {
 }
 
 // Output
-static const string ALGO_NAMES[6] = {"", "FCFS", "RR-","SRT", "HRRN"};
+static const string ALGO_NAMES[7] = {"", "FCFS", "RR-","SRT", "HRRN","FB-1", "FB-2i"};
 
 static string algoLabel(const AlgorithmSpec &s) {
     if (s.id == 2) return "RR-" + to_string(s.quantum);
