@@ -346,8 +346,3 @@ Each demonstration test runs all six implemented scheduling algorithms.
 * **Data Structures**
 * **CPU Scheduling Algorithms**
 
-## Repository
-
-GitHub:
-
-https://github.com/furkanrs/cpuscheduler
